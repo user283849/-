@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>香港實際油價計算</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield; /* 移除上下箭頭 */
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none; /* 移除上下箭頭 */
+            margin: 0;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+        }
+        .details {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+        }
+        .points-default {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .remarks {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>香港實際油價計算</h1>
+        <form id="oil-calculator">
+            <label for="oil-company">選擇油公司：</label>
+            <select id="oil-company">
+                <option value="esso">Esso</option>
+                <option value="caltex">Caltex</option>
+                <option value="shell">Shell</option>
+                <option value="sinopec">Sinopec</option>
+                <option value="petrochina">PetroChina</option>
+            </select>
+
+            <label for="fuel-type">選擇油類：</label>
+            <select id="fuel-type">
+                <option value="regular">普通油（Standard Petrol）</option>
+                <option value="premium">特級油（Premium Petrol）</option>
+            </select>
+
+            <label for="oil-price">油價（每升，如免費升級則輸入普通油油價）：</label>
+            <input type="number" id="oil-price" required step="any">
+
+            <label for="amount">入油金額（HK$）：</label>
+            <input type="number" id="amount" required step="any">
+
+            <label for="coupon-threshold">油券條件（消費滿）：</label>
+            <input type="number" id="coupon-threshold" step="any" placeholder="留空為沒有油券">
+
+            <label for="coupon-bonus">油券贈送油等值金額（HK$）：</label>
+            <input type="number" id="coupon-bonus" step="any" placeholder="留空為沒有油券">
+
+            <label for="membership-discount">會員優惠（每升減）：</label>
+            <input type="number" id="membership-discount" step="any" value="0">
+
+            <label for="upgrade">免費升級到特級油：</label>
+            <select id="upgrade">
+                <option value="no">沒有</option>
+                <option value="yes">有</option>
+            </select>
+
+            <label for="credit-card-discount">信用卡折扣率（例如 0.95 表示 95 折，留空為沒有折扣）：</label>
+            <input type="number" id="credit-card-discount" min="0" max="1" step="any" placeholder="留空為沒有折扣">
+
+            <label for="earn-points">是否賺取積分：</label>
+            <select id="earn-points">
+                <option value="yes">是</option>
+                <option value="no">否</option>
+            </select>
+
+            <label for="points-multiplier">積分倍數（預設為 1）：</label>
+            <input type="number" id="points-multiplier" step="any" value="1">
+
+            <label for="points-value">積分價值（x 分等值 $y）：</label>
+            <div>
+                <input type="number" id="points-x" placeholder="x 分" step="any">
+                <input type="number" id="points-y" placeholder="y 元" step="any">
+            </div>
+            <div class="points-default" id="points-default"></div>
+
+            <button type="submit">計算實際油價</button>
+        </form>
+        <div class="result">
+            <h3>計算結果：</h3>
+            <p id="final-result"></p>
+            <div class="remarks" id="remarks"></div>
+            <button id="show-details">顯示詳情</button>
+        </div>
+        <div class="details" id="calculation-details">
+            <h3>詳細計算步驟：</h3>
+            <p id="details-content"></p>
+        </div>
+    </div>
+
+    <script>
+        // 預設積分價值
+        const defaultPointsValue = {
+            esso: { x: 7500, y: 300 },
+            caltex: { x: 1, y: 1 },
+            shell: { x: 5000, y: 200 },
+            sinopec: { x: 6500, y: 200 },
+            petrochina: { x: 12000, y: 200 }
+        };
+
+        // 顯示預設積分價值
+        function showDefaultPointsValue() {
+            const oilCompany = document.getElementById('oil-company').value;
+            const defaultValue = defaultPointsValue[oilCompany];
+            if (defaultValue) {
+                document.getElementById('points-default').innerText = `預設值：${defaultValue.x} 分等值 ${defaultValue.y} 元`;
+            } else {
+                document.getElementById('points-default').innerText = '';
+            }
+        }
+
+        // 初始化時顯示預設積分價值
+        document.getElementById('oil-company').addEventListener('change', showDefaultPointsValue);
+        showDefaultPointsValue();
+
+        document.getElementById('oil-calculator').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            // 獲取用戶輸入
+            const oilCompany = document.getElementById('oil-company').value;
+            const fuelType = document.getElementById('fuel-type').value;
+            const oilPrice = parseFloat(document.getElementById('oil-price').value);
+            const amount = parseFloat(document.getElementById('amount').value);
+            const couponThreshold = parseFloat(document.getElementById('coupon-threshold').value) || 0; // 留空為 0
+            const couponBonus = parseFloat(document.getElementById('coupon-bonus').value) || 0; // 留空為 0
+            const membershipDiscount = parseFloat(document.getElementById('membership-discount').value);
+            const upgrade = document.getElementById('upgrade').value;
+            const creditCardDiscount = parseFloat(document.getElementById('credit-card-discount').value) || 1; // 留空為 1
+            const earnPoints = document.getElementById('earn-points').value;
+            const pointsMultiplier = parseFloat(document.getElementById('points-multiplier').value);
+            const pointsX = parseFloat(document.getElementById('points-x').value);
+            const pointsY = parseFloat(document.getElementById('points-y').value);
+
+            // 計算總付款
+            const totalPayment = amount * creditCardDiscount;
+
+            // 計算基本入油量（考慮會員優惠）
+            const effectiveOilPrice = oilPrice - membershipDiscount;
+            let baseLiters = amount / effectiveOilPrice;
+
+            // 免費升級到特級油
+            if (upgrade === 'yes' && fuelType === 'regular') {
+                baseLiters = amount / effectiveOilPrice;
+            }
+
+            // 油券贈送油等值金額轉換為油量
+            const couponLiters = couponBonus / oilPrice;
+
+            // 計算積分（油券贈送油量不計算積分）
+            let points = 0;
+            if (earnPoints === 'yes') {
+                switch (oilCompany) {
+                    case 'esso':
+                        points = fuelType === 'regular' ? baseLiters * 10 : baseLiters * 15;
+                        break;
+                    case 'caltex':
+                        points = fuelType === 'regular' ? Math.floor(baseLiters / 2) : baseLiters;
+                        break;
+                    case 'shell':
+                        points = fuelType === 'regular' ? baseLiters * 10 : baseLiters * 15;
+                        break;
+                    case 'sinopec':
+                        points = fuelType === 'regular' ? Math.floor(totalPayment / 100) * 35 : Math.floor(totalPayment / 100) * 45;
+                        break;
+                    case 'petrochina':
+                        points = totalPayment;
+                        break;
+                }
+                points = Math.round(points * pointsMultiplier); // 積分四捨五入至整數並應用倍數
+            }
+
+            // 計算積分價值換取的油量
+            let pointsLiters = 0;
+            let pointsValuePerPoint = 0; // 每分等值金額
+            if (pointsX > 0 && pointsY > 0) {
+                pointsValuePerPoint = pointsY / pointsX; // 每分等值金額
+                pointsLiters = (points * pointsValuePerPoint) / oilPrice;
+            } else {
+                const defaultValue = defaultPointsValue[oilCompany];
+                if (defaultValue) {
+                    pointsValuePerPoint = defaultValue.y / defaultValue.x; // 每分等值金額
+                    pointsLiters = (points * pointsValuePerPoint) / oilPrice;
+                }
+            }
+
+            // 總入油量 = 基本入油量 + 油券贈送油量 + 積分價值換取的油量
+            const totalLiters = baseLiters + couponLiters + pointsLiters;
+
+            // 計算實際油價
+            const actualPricePerLiter = totalPayment / totalLiters;
+
+            // 顯示結果
+            document.getElementById('final-result').innerHTML = `
+                <p>總入油量：${totalLiters.toFixed(3)} 升</p>
+                <p>實際每升油價：HK$ ${actualPricePerLiter.toFixed(3)}</p>
+                <p>${oilCompany.toUpperCase()} 積分：${points} 分</p>
+            `;
+
+            // 顯示備註
+            document.getElementById('remarks').innerHTML = `
+                <p><strong>備註：</strong></p>
+                <p>每 1 分等值金額：HK$ ${pointsValuePerPoint.toFixed(4)}</p>
+            `;
+
+            // 顯示詳細計算步驟
+            document.getElementById('details-content').innerHTML = `
+                <p><strong>計算步驟：</strong></p>
+                <p>1. 基本入油量 = 入油金額 / (油價 - 會員優惠) = ${amount.toFixed(3)} / (${oilPrice.toFixed(3)} - ${membershipDiscount.toFixed(3)}) = ${baseLiters.toFixed(3)} 升</p>
+                <p>2. 免費升級到特級油：${upgrade === 'yes' ? '是' : '否'}</p>
+                <p>3. 油券贈送油等值金額 = ${couponBonus.toFixed(3)} 元，轉換為油量 = ${couponBonus.toFixed(3)} / ${oilPrice.toFixed(3)} = ${couponLiters.toFixed(3)} 升</p>
+                <p>4. 積分價值換取的油量 = ${pointsLiters.toFixed(3)} 升</p>
+                <p>5. 總入油量 = 基本入油量 + 油券贈送油量 + 積分價值換取的油量 = ${baseLiters.toFixed(3)} + ${couponLiters.toFixed(3)} + ${pointsLiters.toFixed(3)} = ${totalLiters.toFixed(3)} 升</p>
+                <p>6. 總付款 = 入油金額 × 信用卡折扣率 = ${amount.toFixed(3)} × ${creditCardDiscount.toFixed(3)} = ${totalPayment.toFixed(3)} 元</p>
+                <p>7. 實際每升油價 = 總付款 / 總入油量 = ${totalPayment.toFixed(3)} / ${totalLiters.toFixed(3)} = ${actualPricePerLiter.toFixed(3)} 元</p>
+                <p>8. ${oilCompany.toUpperCase()} 積分：${points} 分（積分倍數：${pointsMultiplier.toFixed(3)}）</p>
+            `;
+
+            // 顯示詳情按鈕
+            document.getElementById('calculation-details').style.display = 'none';
+        });
+
+        // 顯示詳情按鈕
+        document.getElementById('show-details').addEventListener('click', function() {
+            const details = document.getElementById('calculation-details');
+            if (details.style.display === 'none') {
+                details.style.display = 'block';
+            } else {
+                details.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
